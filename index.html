@@ -1,0 +1,537 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Grayscale Converter — BT.709</title>
+<style>
+    :root {
+        --ink: #1e293b;
+        --muted: #64748b;
+        --line: #e2e8f0;
+        --accent: #312e81;
+        --accent-soft: #eef2ff;
+        --bg: #f8fafc;
+        --radius: 10px;
+    }
+    * { box-sizing: border-box; }
+    body {
+        margin: 0;
+        background: var(--bg);
+        color: var(--ink);
+        font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+        line-height: 1.5;
+        -webkit-font-smoothing: antialiased;
+    }
+    .wrap { max-width: 920px; margin: 0 auto; padding: 48px 24px 80px; }
+
+    header { margin-bottom: 28px; }
+    h1 {
+        font-size: clamp(1.6rem, 3vw, 2.1rem);
+        font-weight: 600;
+        letter-spacing: -0.02em;
+        margin: 0 0 8px;
+    }
+    .sub { color: var(--muted); margin: 0; max-width: 60ch; }
+
+    /* Mode switch */
+    .modes { display: flex; gap: 8px; margin: 24px 0 6px; }
+    .mode-btn {
+        flex: 1;
+        text-align: left;
+        font: inherit;
+        cursor: pointer;
+        background: #fff;
+        border: 1.5px solid var(--line);
+        border-radius: var(--radius);
+        padding: 14px 16px;
+        transition: border-color .15s ease, background .15s ease, box-shadow .15s ease;
+    }
+    .mode-btn:hover { border-color: #cbd5e1; }
+    .mode-btn[aria-pressed="true"] {
+        border-color: var(--accent);
+        background: var(--accent-soft);
+        box-shadow: inset 0 0 0 1px var(--accent);
+    }
+    .mode-btn .label { font-weight: 600; font-size: 0.98rem; display: block; }
+    .mode-btn .desc { font-size: 0.82rem; color: var(--muted); margin-top: 2px; }
+    .mode-btn:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+
+    .formula {
+        font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+        font-size: 0.8rem;
+        color: var(--accent);
+        background: var(--accent-soft);
+        border: 1px solid #e0e7ff;
+        padding: 6px 10px;
+        border-radius: 6px;
+        display: inline-block;
+        margin: 18px 0 14px;
+    }
+
+    /* Crop option (photos only) */
+    .cropopt {
+        display: none;
+        align-items: center;
+        gap: 9px;
+        margin: 0 0 22px;
+        font-size: 0.92rem;
+        cursor: pointer;
+        user-select: none;
+        width: fit-content;
+    }
+    .cropopt.show { display: flex; }
+    .cropopt input { width: 16px; height: 16px; accent-color: var(--accent); cursor: pointer; }
+
+    /* Drop zone */
+    #drop {
+        border: 1.5px dashed #cbd5e1;
+        border-radius: var(--radius);
+        background: #fff;
+        padding: 44px 24px;
+        text-align: center;
+        cursor: pointer;
+        transition: border-color .18s ease, background .18s ease;
+    }
+    #drop.drag { border-color: var(--accent); background: var(--accent-soft); }
+    #drop .big { font-size: 1.05rem; font-weight: 500; }
+    #drop .small { color: var(--muted); font-size: 0.9rem; margin-top: 4px; }
+    #drop svg { width: 34px; height: 34px; color: #94a3b8; margin-bottom: 10px; }
+    #file { display: none; }
+
+    .status { min-height: 20px; font-size: 0.85rem; color: var(--muted); margin-top: 12px; }
+
+    /* Toolbar */
+    .bar {
+        display: none;
+        align-items: center;
+        justify-content: space-between;
+        gap: 12px;
+        margin: 20px 0 16px;
+        flex-wrap: wrap;
+    }
+    .bar.show { display: flex; }
+    .count { font-size: 0.9rem; color: var(--muted); }
+    .actions { display: flex; gap: 10px; flex-wrap: wrap; }
+    .btn {
+        font: inherit;
+        font-size: 0.9rem;
+        font-weight: 500;
+        border-radius: 7px;
+        padding: 9px 16px;
+        cursor: pointer;
+        border: 1px solid var(--line);
+        background: #fff;
+        color: var(--ink);
+        transition: background .15s ease, border-color .15s ease;
+    }
+    .btn:hover { border-color: #cbd5e1; }
+    .btn.primary { background: var(--accent); border-color: var(--accent); color: #fff; }
+    .btn.primary:hover { background: #3730a3; }
+    .btn:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+
+    /* Grid */
+    .grid {
+        display: grid;
+        grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+        gap: 18px;
+    }
+    .card {
+        background: #fff;
+        border: 1px solid var(--line);
+        border-radius: var(--radius);
+        overflow: hidden;
+        display: flex;
+        flex-direction: column;
+        position: relative;
+    }
+    .badge {
+        position: absolute;
+        top: 10px; left: 10px;
+        font-size: 0.68rem;
+        font-weight: 600;
+        text-transform: uppercase;
+        letter-spacing: 0.04em;
+        padding: 3px 8px;
+        border-radius: 5px;
+        background: rgba(49,46,129,0.9);
+        color: #fff;
+    }
+    .badge.photo { background: rgba(13,148,136,0.92); }
+    .preview {
+        background-color: #fff;
+        background-image:
+            linear-gradient(45deg, #f1f5f9 25%, transparent 25%),
+            linear-gradient(-45deg, #f1f5f9 25%, transparent 25%),
+            linear-gradient(45deg, transparent 75%, #f1f5f9 75%),
+            linear-gradient(-45deg, transparent 75%, #f1f5f9 75%);
+        background-size: 16px 16px;
+        background-position: 0 0, 0 8px, 8px -8px, -8px 0;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        padding: 18px;
+        min-height: 150px;
+    }
+    .preview img { max-width: 100%; max-height: 180px; display: block; }
+    .meta {
+        padding: 12px 14px;
+        border-top: 1px solid var(--line);
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 10px;
+    }
+    .metatext { display: flex; flex-direction: column; min-width: 0; }
+    .name {
+        font-size: 0.82rem;
+        color: var(--ink);
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+    }
+    .note { font-size: 0.72rem; color: var(--muted); margin-top: 2px; }
+    .dl {
+        flex-shrink: 0;
+        font-size: 0.8rem;
+        padding: 6px 12px;
+        color: var(--accent);
+        text-decoration: none;
+        border: 1px solid #c7d2fe;
+        border-radius: 6px;
+        background: #fff;
+    }
+    .dl:hover { background: var(--accent-soft); }
+
+    footer { margin-top: 40px; font-size: 0.82rem; color: var(--muted); }
+    code { font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; background: #fff; padding: 1px 5px; border-radius: 4px; border: 1px solid var(--line); }
+</style>
+</head>
+<body>
+<div class="wrap">
+    <header>
+        <h1>Grayscale converter</h1>
+        <p class="sub">Convert logos or photos to grayscale with the ITU-R BT.709 formula. Pick a mode, then drop in your images — everything runs in your browser and nothing is uploaded anywhere.</p>
+    </header>
+
+    <div class="modes" role="group" aria-label="Conversion mode">
+        <button class="mode-btn" id="mode-logo" aria-pressed="true">
+            <span class="label">Logos</span>
+            <span class="desc">High contrast — darkest tone becomes black, transparency flattened to white.</span>
+        </button>
+        <button class="mode-btn" id="mode-photo" aria-pressed="false">
+            <span class="label">Photos / faces</span>
+            <span class="desc">Faithful tones — full gray range kept, no crushing. White background only if the image is transparent.</span>
+        </button>
+    </div>
+
+    <span class="formula">luma = 0.21·R + 0.72·G + 0.07·B</span>
+
+    <label class="cropopt" id="cropopt">
+        <input type="checkbox" id="cropToggle" checked>
+        <span>Square crop centered on the face</span>
+    </label>
+
+    <div id="drop" tabindex="0" role="button" aria-label="Choose or drop images">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
+        <div class="big">Drop images here, or click to choose</div>
+        <div class="small" id="dropHint">PNG, JPG, WEBP, SVG · multiple files OK</div>
+    </div>
+    <input type="file" id="file" accept="image/*" multiple>
+
+    <div class="status" id="status"></div>
+
+    <div class="bar" id="bar">
+        <span class="count" id="count"></span>
+        <div class="actions">
+            <button id="downloadAll" class="btn primary">Download all</button>
+            <button id="clear" class="btn">Clear</button>
+        </div>
+    </div>
+
+    <div class="grid" id="grid"></div>
+
+    <footer id="footer"></footer>
+</div>
+
+<script>
+(function () {
+    const drop = document.getElementById('drop');
+    const fileInput = document.getElementById('file');
+    const grid = document.getElementById('grid');
+    const bar = document.getElementById('bar');
+    const count = document.getElementById('count');
+    const downloadAll = document.getElementById('downloadAll');
+    const clearBtn = document.getElementById('clear');
+    const modeLogo = document.getElementById('mode-logo');
+    const modePhoto = document.getElementById('mode-photo');
+    const dropHint = document.getElementById('dropHint');
+    const footer = document.getElementById('footer');
+    const cropopt = document.getElementById('cropopt');
+    const cropToggle = document.getElementById('cropToggle');
+    const statusEl = document.getElementById('status');
+
+    // How much of the square is face vs. surroundings. 2.0 = face is half the
+    // crop width, leaving headroom and shoulders. Tweak to taste.
+    const FACE_PAD = 2.0;
+
+    // MediaPipe face detector (loaded on demand, cached by the browser).
+    const MP_LIB = 'https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.35/vision_bundle.mjs';
+    const MP_WASM = 'https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.35/wasm';
+    const MP_MODEL = 'https://storage.googleapis.com/mediapipe-models/face_detector/blaze_face_short_range/float16/1/blaze_face_short_range.tflite';
+
+    let mode = 'logo';          // 'logo' | 'photo'
+    let results = [];           // { name, url, mode, note }
+    let detector = null;
+    let detectorPromise = null;
+    let detectorFailed = false;
+
+    const HINTS = {
+        logo: 'Logos mode · PNG, JPG, WEBP, SVG · multiple files OK',
+        photo: 'Photos mode · PNG, JPG, WEBP · faces & people · multiple files OK'
+    };
+    const NOTES = {
+        logo: 'Logos mode contrast-stretches each image so its own darkest pixel becomes black (<code>0</code>) and its lightest becomes white (<code>255</code>). Transparent areas are filled white. Output is PNG.',
+        photo: 'Photos mode applies the BT.709 luma directly with no stretching, so faces keep their full natural range of grays. With the crop on, a square is centered on the largest detected face (a center crop is used if no face is found). Output is PNG.'
+    };
+
+    function setStatus(msg) { statusEl.innerHTML = msg || ''; }
+
+    function setMode(next) {
+        mode = next;
+        const isLogo = next === 'logo';
+        modeLogo.setAttribute('aria-pressed', String(isLogo));
+        modePhoto.setAttribute('aria-pressed', String(!isLogo));
+        dropHint.textContent = HINTS[next];
+        footer.innerHTML = NOTES[next];
+        cropopt.classList.toggle('show', !isLogo);
+    }
+    modeLogo.addEventListener('click', () => setMode('logo'));
+    modePhoto.addEventListener('click', () => setMode('photo'));
+
+    // ---- shared helpers ----
+    function readPixels(image, fillWhite, sx, sy, sw, sh, outW, outH) {
+        const w = outW, h = outH;
+        const canvas = document.createElement('canvas');
+        canvas.width = w; canvas.height = h;
+        const ctx = canvas.getContext('2d');
+        if (fillWhite) { ctx.fillStyle = '#ffffff'; ctx.fillRect(0, 0, w, h); }
+        ctx.drawImage(image, sx, sy, sw, sh, 0, 0, w, h);
+        return { ctx, canvas, data: ctx.getImageData(0, 0, w, h) };
+    }
+
+    function hasTransparency(image) {
+        const w = image.naturalWidth, h = image.naturalHeight;
+        const c = document.createElement('canvas');
+        c.width = w; c.height = h;
+        const ctx = c.getContext('2d');
+        ctx.drawImage(image, 0, 0, w, h);
+        const d = ctx.getImageData(0, 0, w, h).data;
+        for (let i = 3; i < d.length; i += 4) { if (d[i] < 255) return true; }
+        return false;
+    }
+
+    function finalize(canvas, fileName) {
+        const base = fileName.replace(/\.[^.]+$/, '');
+        return { name: base + '_grayscale.png', url: canvas.toDataURL('image/png') };
+    }
+
+    // ---- LOGO: BT.709 + white flatten + contrast stretch ----
+    function convertLogo(image, fileName) {
+        const w = image.naturalWidth, h = image.naturalHeight;
+        const { ctx, canvas, data } = readPixels(image, true, 0, 0, w, h, w, h);
+        const px = data.data, n = px.length / 4;
+        const luma = new Float32Array(n);
+        let lo = Infinity, hi = -Infinity;
+        for (let i = 0; i < n; i++) {
+            const L = 0.21 * px[i*4] + 0.72 * px[i*4+1] + 0.07 * px[i*4+2];
+            luma[i] = L;
+            if (L < lo) lo = L;
+            if (L > hi) hi = L;
+        }
+        const range = hi - lo;
+        for (let i = 0; i < n; i++) {
+            let v = range > 0 ? ((luma[i] - lo) / range) * 255 : 255;
+            v = v < 0 ? 0 : v > 255 ? 255 : v;
+            const o = i * 4;
+            px[o] = px[o+1] = px[o+2] = v; px[o+3] = 255;
+        }
+        ctx.putImageData(data, 0, 0);
+        return finalize(canvas, fileName);
+    }
+
+    // ---- PHOTO: faithful BT.709, no stretch, optional face-centered square crop ----
+    function convertPhoto(image, fileName, crop) {
+        const w = image.naturalWidth, h = image.naturalHeight;
+        const transparent = hasTransparency(image);
+        let sx = 0, sy = 0, sw = w, sh = h, outW = w, outH = h, note = '';
+        if (crop) {
+            sx = crop.x0; sy = crop.y0; sw = crop.side; sh = crop.side;
+            outW = crop.side; outH = crop.side; note = crop.note;
+        }
+        const { ctx, canvas, data } = readPixels(image, transparent, sx, sy, sw, sh, outW, outH);
+        const px = data.data, n = px.length / 4;
+        for (let i = 0; i < n; i++) {
+            const o = i * 4;
+            let v = Math.round(0.21 * px[o] + 0.72 * px[o+1] + 0.07 * px[o+2]); // full range kept
+            v = v < 0 ? 0 : v > 255 ? 255 : v;
+            px[o] = px[o+1] = px[o+2] = v; px[o+3] = 255;
+        }
+        ctx.putImageData(data, 0, 0);
+        const res = finalize(canvas, fileName);
+        res.note = note;
+        return res;
+    }
+
+    // ---- face detection ----
+    async function getDetector() {
+        if (detector) return detector;
+        if (detectorFailed) return null;
+        if (!detectorPromise) {
+            detectorPromise = (async () => {
+                setStatus('Loading face detector (first time only)…');
+                const mp = await import(MP_LIB);
+                const vision = await mp.FilesetResolver.forVisionTasks(MP_WASM);
+                detector = await mp.FaceDetector.createFromModelPath(vision, MP_MODEL);
+                setStatus('');
+                return detector;
+            })().catch(err => {
+                console.warn('Face detector unavailable:', err);
+                detectorFailed = true;
+                setStatus('');
+                return null;
+            });
+        }
+        return detectorPromise;
+    }
+
+    function centerSquare(w, h) {
+        const side = Math.min(w, h);
+        return { x0: Math.round((w - side) / 2), y0: Math.round((h - side) / 2), side };
+    }
+
+    async function cropRectForFace(image) {
+        const w = image.naturalWidth, h = image.naturalHeight;
+        const det = await getDetector();
+        if (!det) { const c = centerSquare(w, h); c.note = 'Center crop · detector unavailable'; return c; }
+        let result;
+        try { result = det.detect(image); } catch (e) { console.warn(e); }
+        const dets = result && result.detections ? result.detections : [];
+        if (!dets.length) { const c = centerSquare(w, h); c.note = 'Center crop · no face found'; return c; }
+
+        // largest face by box area
+        let best = dets[0];
+        for (const d of dets) {
+            const a = d.boundingBox.width * d.boundingBox.height;
+            if (a > best.boundingBox.width * best.boundingBox.height) best = d;
+        }
+        const b = best.boundingBox;
+        const cx = b.originX + b.width / 2;
+        const cy = b.originY + b.height / 2;
+        let side = Math.round(Math.max(b.width, b.height) * FACE_PAD);
+        side = Math.min(side, w, h);               // square can't exceed the image
+        let x0 = Math.round(cx - side / 2);
+        let y0 = Math.round(cy - side / 2);
+        x0 = Math.max(0, Math.min(x0, w - side));  // keep inside the image (face may
+        y0 = Math.max(0, Math.min(y0, h - side));  // shift slightly off-center at edges)
+        return { x0, y0, side, note: 'Face-centered crop' };
+    }
+
+    function addCard(res) {
+        const card = document.createElement('div');
+        card.className = 'card';
+        card.innerHTML =
+            '<span class="badge"></span>' +
+            '<div class="preview"><img alt=""></div>' +
+            '<div class="meta"><div class="metatext"><span class="name"></span><span class="note"></span></div><a class="dl" download>PNG</a></div>';
+        const badge = card.querySelector('.badge');
+        badge.textContent = res.mode === 'photo' ? 'Photo' : 'Logo';
+        if (res.mode === 'photo') badge.classList.add('photo');
+        card.querySelector('img').src = res.url;
+        const name = card.querySelector('.name');
+        name.textContent = res.name; name.title = res.name;
+        const note = card.querySelector('.note');
+        if (res.note) note.textContent = res.note; else note.remove();
+        const a = card.querySelector('.dl');
+        a.href = res.url; a.download = res.name;
+        grid.appendChild(card);
+    }
+
+    function refreshBar() {
+        if (results.length) {
+            bar.classList.add('show');
+            count.textContent = results.length + (results.length === 1 ? ' image converted' : ' images converted');
+        } else {
+            bar.classList.remove('show');
+        }
+    }
+
+    function loadImage(file) {
+        return new Promise((resolve, reject) => {
+            const reader = new FileReader();
+            reader.onload = e => {
+                const img = new Image();
+                img.onload = () => resolve(img);
+                img.onerror = reject;
+                img.src = e.target.result;
+            };
+            reader.onerror = reject;
+            reader.readAsDataURL(file);
+        });
+    }
+
+    async function handleFiles(fileList) {
+        const files = Array.from(fileList).filter(f => f.type.startsWith('image/'));
+        const activeMode = mode;            // lock mode at drop time
+        const doCrop = cropToggle.checked;  // lock crop choice at drop time
+        for (const file of files) {
+            let img;
+            try { img = await loadImage(file); }
+            catch { console.warn('Could not load', file.name); continue; }
+
+            let res;
+            if (activeMode === 'photo') {
+                const crop = doCrop ? await cropRectForFace(img) : null;
+                res = convertPhoto(img, file.name, crop);
+            } else {
+                res = convertLogo(img, file.name);
+            }
+            res.mode = activeMode;
+            results.push(res);
+            addCard(res);
+            refreshBar();
+        }
+    }
+
+    // ---- events ----
+    drop.addEventListener('click', () => fileInput.click());
+    drop.addEventListener('keydown', e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); fileInput.click(); } });
+    fileInput.addEventListener('change', e => { handleFiles(e.target.files); fileInput.value = ''; });
+
+    ['dragenter', 'dragover'].forEach(ev =>
+        drop.addEventListener(ev, e => { e.preventDefault(); drop.classList.add('drag'); }));
+    ['dragleave', 'drop'].forEach(ev =>
+        drop.addEventListener(ev, e => { e.preventDefault(); drop.classList.remove('drag'); }));
+    drop.addEventListener('drop', e => handleFiles(e.dataTransfer.files));
+
+    downloadAll.addEventListener('click', () => {
+        results.forEach((res, i) => {
+            setTimeout(() => {
+                const a = document.createElement('a');
+                a.href = res.url; a.download = res.name;
+                document.body.appendChild(a); a.click(); a.remove();
+            }, i * 250);
+        });
+    });
+
+    clearBtn.addEventListener('click', () => {
+        results = [];
+        grid.innerHTML = '';
+        refreshBar();
+    });
+
+    setMode('logo');
+})();
+</script>
+</body>
+</html>
