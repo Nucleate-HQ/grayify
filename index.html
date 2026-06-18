@@ -210,22 +210,20 @@
 <body>
 <div class="wrap">
     <header>
-        <h1>Grayscale converter</h1>
-        <p class="sub">Convert logos or photos to grayscale with the ITU-R BT.709 formula. Pick a mode, then drop in your images — everything runs in your browser and nothing is uploaded anywhere.</p>
+        <h1>Nucleate Grayscale converter</h1>
+        <p class="sub">Convert logos or photos to grayscale. Pick a mode, then drop in your images - everything runs in your browser and nothing is uploaded anywhere.</p>
     </header>
 
     <div class="modes" role="group" aria-label="Conversion mode">
         <button class="mode-btn" id="mode-logo" aria-pressed="true">
             <span class="label">Logos</span>
-            <span class="desc">High contrast — darkest tone becomes black, transparency flattened to white.</span>
+            <span class="desc">High contrast: darkest tone becomes black, transparency flattened to white.</span>
         </button>
         <button class="mode-btn" id="mode-photo" aria-pressed="false">
             <span class="label">Photos / faces</span>
-            <span class="desc">Faithful tones — full gray range kept, no crushing. White background only if the image is transparent.</span>
+            <span class="desc">Faithful tones: full gray range kept. White background only if the image is transparent.</span>
         </button>
     </div>
-
-    <span class="formula">luma = 0.21·R + 0.72·G + 0.07·B</span>
 
     <label class="cropopt" id="cropopt">
         <input type="checkbox" id="cropToggle" checked>
@@ -291,8 +289,8 @@
         photo: 'Photos mode · PNG, JPG, WEBP · faces & people · multiple files OK'
     };
     const NOTES = {
-        logo: 'Logos mode contrast-stretches each image so its own darkest pixel becomes black (<code>0</code>) and its lightest becomes white (<code>255</code>). Transparent areas are filled white. Output is PNG.',
-        photo: 'Photos mode applies the BT.709 luma directly with no stretching, so faces keep their full natural range of grays. With the crop on, a square is centered on the largest detected face (a center crop is used if no face is found). Output is PNG.'
+        logo: 'Transparent areas are filled white. Output is PNG.',
+        photo: 'With the crop on, a square is centered on the largest detected face (a center crop is used if no face is found). Output is PNG.'
     };
 
     function setStatus(msg) { statusEl.innerHTML = msg || ''; }
